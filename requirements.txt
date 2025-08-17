@@ -1,0 +1,14 @@
+transformers
+fastapi
+pydantic
+langchain_community
+asyncio
+httpx
+langchain
+requests
+pypdf
+sentence_transformers
+torch
+chromadb
+langchain_huggingface
+langchain_chroma
