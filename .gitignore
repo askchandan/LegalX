@@ -1,5 +1,5 @@
 # Prevent private data and indexes from being pushed
-data/Cyber Crimes Offenses & Penalties In India[1].pdf
+data/
 chroma_store/
 
 # Byte-compiled / optimized / DLL files
@@ -11,7 +11,7 @@ __pycache__/
 *.so
 
 # All-MiniLM-L6-v2
-./all-MiniLM-L6-v2
+all-MiniLM-L6-v2
 
 
 # Track_record
