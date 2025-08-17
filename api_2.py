@@ -153,3 +153,4 @@ Answer:
 @app.get("/health")
 async def health():
     return {"status": "healthy" if vector_store else "unhealthy"}
+
