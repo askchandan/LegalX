@@ -105,69 +105,50 @@ async def generate_response(request: PromptRequest):
 {context}
 [Context Ends]
 
-Question: {request.prompt}
 
 Answer:
     """)
 
-    async def stream_chunks():
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "http://localhost:11434/api/generate",
-                json={
-                    "model": "qwen3:0.6b",
-                    "prompt": prompt,
-                    "stream": True,
-                    "temperature": TEMPERATURE,
-                    "top_p": TOP_P,
-                    "repeat_penalty": REPEAT_PENALTY,
-                    "max_tokens": MAX_TOKENS
-                },
-                timeout=120.0
-            )
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "qwen3:0.6b",
+                "prompt": prompt,
+                "stream": False,
+                "temperature": TEMPERATURE,
+                "top_p": TOP_P,
+                "repeat_penalty": REPEAT_PENALTY,
+                "max_tokens": MAX_TOKENS
+            },
+            timeout=120.0
+        )
 
-            if response.status_code != 200:
-                yield '{"error": "Ollama model error."}'
-                return
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail="Ollama model error.")
 
-            import json as _json
-            buffer = ""
-            in_think = False
-            think_buffer = ""
-            answer_started = False
-            async for chunk in response.aiter_lines():
-                if chunk:
-                    try:
-                        data = _json.loads(chunk)
-                        if 'response' in data:
-                            buffer += data['response']
-                            while True:
-                                think_start = buffer.find('<think>')
-                                think_end = buffer.find('</think>')
-                                if not in_think and think_start != -1:
-                                    in_think = True
-                                    buffer = buffer[think_start+7:]
-                                if in_think and think_end != -1:
-                                    think_buffer += buffer[:think_end]
-                                    yield f'THINK:{think_buffer.strip()}'
-                                    buffer = buffer[think_end+8:]
-                                    in_think = False
-                                    think_buffer = ""
-                                    answer_started = True
-                                elif in_think:
-                                    think_buffer += buffer
-                                    buffer = ""
-                                    break
-                                elif answer_started and buffer:
-                                    yield f'ANSWER:{buffer}'
-                                    buffer = ""
-                                    break
-                                else:
-                                    break
-                    except Exception:
-                        pass
+    result = response.json()
+    full_text = result.get("response", "").strip()
+    think_text = ""
+    answer_text = full_text
+    think_start = full_text.find('<think>')
+    think_end = full_text.find('</think>')
+    if think_start != -1 and think_end != -1 and think_end > think_start:
+        think_text = full_text[think_start+7:think_end].strip()
+        answer_text = full_text[think_end+8:].strip()
 
-    return StreamingResponse(stream_chunks(), media_type="text/plain")
+    return {
+        "think": think_text,
+        "response": answer_text,
+        "context_sources": [
+            {
+                "source": doc[0].metadata.get("source", "unknown"),
+                "text": doc[0].page_content,
+                "score": doc[1]
+            }
+            for doc in docs
+        ]
+    }
 
 @app.get("/health")
 async def health():
