@@ -1,3 +1,24 @@
+# dependencies
+/node_modules
+
+# production
+/.next
+/out
+
+# testing
+/coverage
+
+# misc
+.DS_Store
+*.log
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# typescript
+*.tsbuildinfo
+
 # Prevent private data and indexes from being pushed
 data/
 chroma_store/
