@@ -49,19 +49,93 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: input }),
       });
-      const data = await res.json();
-      setMessages((prev) => {
-        // Remove the last streaming placeholder
-        const filtered = prev.filter((msg, idx) => !(idx === prev.length - 1 && msg.role === "assistant" && msg.think === "streaming"));
-        return [
-          ...filtered,
-          {
-            role: "assistant",
-            think: data.think,
-            response: data.response,
-          },
-        ];
-      });
+      if (!res.body) throw new Error("No response body");
+      const reader = res.body.getReader();
+      let decoder = new TextDecoder();
+      let buffer = "";
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Try to extract complete JSON objects
+        let startIndex = 0;
+        let braceCount = 0;
+        let inString = false;
+        let escaped = false;
+        
+        for (let i = 0; i < buffer.length; i++) {
+          const char = buffer[i];
+          
+          if (escaped) {
+            escaped = false;
+            continue;
+          }
+          
+          if (char === '\\') {
+            escaped = true;
+            continue;
+          }
+          
+          if (char === '"') {
+            inString = !inString;
+            continue;
+          }
+          
+          if (!inString) {
+            if (char === '{') {
+              braceCount++;
+            } else if (char === '}') {
+              braceCount--;
+              if (braceCount === 0) {
+                // Found complete JSON object
+                const jsonStr = buffer.slice(startIndex, i + 1);
+                try {
+                  const data = JSON.parse(jsonStr);
+                  
+                  if (data.phase === "thinking") {
+                    // Update only the thinking part
+                    setMessages((prev) => {
+                      return prev.map((msg, idx) =>
+                        idx === prev.length - 1 && msg.role === "assistant"
+                          ? { ...msg, think: data.think || "", response: "streaming" }
+                          : msg
+                      );
+                    });
+                  } else if (data.phase === "response") {
+                    // Update the response part
+                    setMessages((prev) => {
+                      return prev.map((msg, idx) =>
+                        idx === prev.length - 1 && msg.role === "assistant"
+                          ? { ...msg, think: data.think || "", response: data.response || "" }
+                          : msg
+                      );
+                    });
+                  } else {
+                    // Fallback for backward compatibility
+                    setMessages((prev) => {
+                      return prev.map((msg, idx) =>
+                        idx === prev.length - 1 && msg.role === "assistant"
+                          ? { ...msg, think: data.think || "", response: data.response || "" }
+                          : msg
+                      );
+                    });
+                  }
+                } catch (e) {
+                  console.error("Parse error:", e);
+                }
+                
+                // Remove processed JSON from buffer
+                buffer = buffer.slice(i + 1);
+                startIndex = 0;
+                i = -1; // Reset loop
+              }
+            }
+          }
+        }
+      }
     } catch (err) {
       setMessages((prev) => {
         const filtered = prev.filter((msg, idx) => !(idx === prev.length - 1 && msg.role === "assistant" && msg.think === "streaming"));
@@ -109,7 +183,7 @@ export default function Home() {
                 <div key={idx} className="flex flex-col items-start mb-4">
                   <div className="max-w-xl bg-gray-900 bg-opacity-80 text-white rounded-2xl px-6 py-4 shadow-lg mb-2">
                     <span className="block text-xs text-indigo-300 mb-2">Thinking...</span>
-                    {msg.think === "streaming" ? (
+                    {msg.think === "streaming" || !msg.think ? (
                       <span className="flex items-center gap-2">
                         <span className="animate-pulse">●</span>
                         <span className="animate-pulse">●</span>
@@ -120,7 +194,7 @@ export default function Home() {
                     )}
                   </div>
                   <div className="max-w-xl bg-indigo-800 text-white rounded-2xl px-6 py-4 shadow-lg">
-                    {msg.response === "streaming" ? (
+                    {msg.response === "streaming" || !msg.response ? (
                       <span className="flex items-center gap-2">
                         <span className="animate-bounce">●</span>
                         <span className="animate-bounce">●</span>
