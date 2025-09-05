@@ -1,4 +1,4 @@
-# LegalX - Legal Advisory Management System - Judgement at your fingertips
+# LegalX - Legal Advisory Management System
 
 ## Description
 
